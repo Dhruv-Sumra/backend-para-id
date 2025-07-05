@@ -1,4 +1,5 @@
 import app from '../server.js';
 
-// Export the app for Vercel serverless functions
+// For Vercel serverless functions, we need to handle the connection differently
+// Export a handler that ensures connection before processing requests
 export default app;

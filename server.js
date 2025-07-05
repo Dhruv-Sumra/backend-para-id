@@ -87,24 +87,36 @@ app.use('/idcards', express.static(path.join(__dirname, 'idcards'), {
 
 // Database connection for serverless and regular environments
 let isConnected = false;
+let isConnecting = false;
 
 const connectDB = async () => {
-  if (isConnected) return;
+  if (isConnected) return true;
+  if (isConnecting) {
+    // Wait for existing connection attempt
+    while (isConnecting) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    return isConnected;
+  }
+  
+  isConnecting = true;
   try {
     const mongoURI = process.env.MONGODB_URI;
-    if (!process.env.MONGODB_URI) {
-      console.warn('⚠️  MONGODB_URI not set in .env, using local MongoDB.');
-    } else {
-      console.log('🌐 Using MongoDB URI from .env:', process.env.MONGODB_URI);
+    if (!mongoURI) {
+      console.warn('⚠️  MONGODB_URI not set, cannot connect to database.');
+      throw new Error('MONGODB_URI not configured');
     }
     
-    // Different connection options for serverless vs regular deployment
+    console.log('🌐 Connecting to MongoDB...');
+    
+    // Always use bufferCommands: true to prevent the error
     const connectionOptions = {
       maxPoolSize: process.env.VERCEL === '1' ? 10 : 50,
       minPoolSize: process.env.VERCEL === '1' ? 1 : 10,
-      serverSelectionTimeoutMS: 10000,
+      serverSelectionTimeoutMS: 15000,
       socketTimeoutMS: 60000,
-      bufferCommands: process.env.VERCEL === '1' ? true : false, // Enable buffering for serverless
+      bufferCommands: true, // Always true to prevent connection errors
+      bufferMaxEntries: 0,
       maxIdleTimeMS: 30000,
       retryWrites: true,
       w: 'majority',
@@ -114,26 +126,30 @@ const connectDB = async () => {
     await mongoose.connect(mongoURI, connectionOptions);
     isConnected = true;
     console.log('✅ Connected to MongoDB successfully!');
+    return true;
   } catch (error) {
     console.error('❌ MongoDB connection error:', error.message);
+    isConnected = false;
     throw error;
+  } finally {
+    isConnecting = false;
   }
 };
 
 // Middleware to ensure database connection before handling requests
 app.use(async (req, res, next) => {
-  if (!isConnected) {
-    try {
-      await connectDB();
-    } catch (error) {
-      return res.status(503).json({ 
-        success: false, 
-        error: 'Database connection failed',
-        message: 'Please try again later'
-      });
-    }
+  try {
+    await connectDB();
+    next();
+  } catch (error) {
+    console.error('Database connection failed for request:', req.path, error.message);
+    return res.status(503).json({ 
+      success: false, 
+      error: 'Database connection failed',
+      message: 'Please try again later',
+      details: error.message
+    });
   }
-  next();
 });
 
 // Routes
