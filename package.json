@@ -14,7 +14,8 @@
     "start:prod": "NODE_ENV=production node --max-old-space-size=4096 server.js",
     "optimize": "node --optimize-for-size --max-old-space-size=4096 server.js",
     "lint": "eslint .",
-    "watch": "node auto-generate.js"
+    "watch": "node auto-generate.js",
+    "health-check": "node health-check.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
