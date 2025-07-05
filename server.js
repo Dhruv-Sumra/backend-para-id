@@ -45,8 +45,26 @@ const limiter = rateLimit({
 app.use('/api/', limiter);
 
 // CORS configuration
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  process.env.FRONTEND_URL
+].filter(Boolean);
+
+console.log('🌐 Allowed CORS origins:', allowedOrigins);
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL,
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log('🚫 CORS blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -143,43 +161,76 @@ const connectDB = async () => {
   if (isConnected) return;
   try {
     const mongoURI = process.env.MONGODB_URI;
-    if (!process.env.MONGODB_URI) {
-      console.warn('⚠️  MONGODB_URI not set in .env, using local MongoDB.');
-    } else {
-      console.log('🌐 Using MongoDB URI from .env:', process.env.MONGODB_URI);
+    if (!mongoURI) {
+      console.warn('⚠️  MONGODB_URI not set in environment variables.');
+      throw new Error('MongoDB URI is required');
     }
+    
+    console.log('🌐 Attempting to connect to MongoDB...');
+    console.log('🔗 MongoDB URI:', mongoURI.substring(0, 20) + '...');
+    
     await mongoose.connect(mongoURI, {
-      maxPoolSize: 50,
-      minPoolSize: 10,
-      serverSelectionTimeoutMS: 10000,
-      socketTimeoutMS: 60000,
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      serverSelectionTimeoutMS: 30000,
+      socketTimeoutMS: 45000,
       bufferCommands: false,
       maxIdleTimeMS: 30000,
       retryWrites: true,
       w: 'majority',
-      readPreference: 'secondaryPreferred',
     });
+    
     isConnected = true;
     console.log('✅ Connected to MongoDB successfully!');
   } catch (error) {
     console.error('❌ MongoDB connection error:', error.message);
+    console.error('🔍 Error details:', error);
+    throw error; // Re-throw to prevent silent failures
   }
 };
 
-// Only start the server if not in a serverless environment
-if (process.env.VERCEL !== '1') {
-  connectDB().then(() => {
+// Start the server for all environments (including Render)
+const startServer = async () => {
+  try {
+    console.log('🚀 Starting Para Sports Backend Server...');
+    console.log('📊 Environment:', process.env.NODE_ENV || 'development');
+    console.log('🔧 Port:', PORT);
+    
+    // Connect to MongoDB first
+    await connectDB();
+    
+    // Start the server
     const server = app.listen(PORT, () => {
-      console.log(`🚀 Server is running on port ${PORT}`);
-      console.log(`📊 Optimized for 1500+ concurrent users`);
+      console.log(`✅ Server is running on port ${PORT}`);
+      console.log(`🌐 Server URL: http://localhost:${PORT}`);
+      console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
     });
-    server.maxConnections = 1000;
+    
+    // Configure server settings
+    server.maxConnections = 100;
     server.keepAliveTimeout = 65000;
     server.headersTimeout = 66000;
-  });
-} else {
-  connectDB();
-}
+    
+    // Graceful shutdown
+    process.on('SIGTERM', () => {
+      console.log('🛑 SIGTERM received, shutting down gracefully...');
+      server.close(() => {
+        console.log('✅ Server closed');
+        mongoose.connection.close(() => {
+          console.log('✅ MongoDB connection closed');
+          process.exit(0);
+        });
+      });
+    });
+    
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+// Start the server
+startServer();
 
 export default app;
 
