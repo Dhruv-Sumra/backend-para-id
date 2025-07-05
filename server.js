@@ -17,7 +17,8 @@ import fs from 'fs';
 
 // Import routes
 import playerRoutes from './routes/playerRoutes.js';
-import idcardRoutes from './routes/idcardRoutes.js';    
+import idcardRoutes from './routes/idcardRoutes.js';
+import userRoutes from './routes/userRoutes.js';
 
 // Import middleware
 import { errorHandler } from './middleware/errorHandler.js';
@@ -138,6 +139,7 @@ app.use(async (req, res, next) => {
 // Routes
 app.use('/api/players', playerRoutes);
 app.use('/api/idcards', idcardRoutes);
+app.use('/api/users', userRoutes);
 
 // Health check route with caching
 app.get('/api/health', (req, res) => {
@@ -169,7 +171,8 @@ app.get('/', (req, res) => {
       health: '/api/health',
       test: '/api/test',
       players: '/api/players',
-      idcards: '/api/idcards'
+      idcards: '/api/idcards',
+      users: '/api/users'
     }
   });
 });
