@@ -2,6 +2,7 @@ services:
   - type: web
     name: para-sports-backend
     env: node
+    region: oregon
     buildCommand: npm install
     startCommand: npm start
     envVars:
@@ -11,4 +12,12 @@ services:
         sync: false
       - key: FRONTEND_URL
         sync: false
-    healthCheckPath: /api/health 
+      - key: SENDER_EMAIL
+        sync: false
+      - key: EMAIL_PASSWORD
+        sync: false
+      - key: EMAIL_SERVICE
+        value: gmail
+    healthCheckPath: /api/health
+    autoDeploy: true
+    preDeployCommand: npm run health-check

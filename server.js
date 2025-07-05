@@ -1,9 +1,19 @@
-// require('dotenv').config();
-// or, if using ES modules:
-// import dotenv from 'dotenv';
-// dotenv.config(path);
-console.log('DEBUG: MONGODB_URI from .env is:', process.env.MONGODB_URI);
-process.env.MONGODB_URI = 'mongodb+srv://gujaratparasports:paraSports07@parasports.sc63qgr.mongodb.net/?retryWrites=true&w=majority&appName=ParaSports';
+// Load environment variables in development
+if (process.env.NODE_ENV !== 'production') {
+  try {
+    const { config } = await import('dotenv');
+    config();
+  } catch (error) {
+    console.log('📝 dotenv not available, using environment variables');
+  }
+}
+
+// Debug environment variables
+console.log('🔍 Environment Check:');
+console.log('- NODE_ENV:', process.env.NODE_ENV);
+console.log('- PORT:', process.env.PORT);
+console.log('- MONGODB_URI:', process.env.MONGODB_URI ? 'SET' : 'NOT SET');
+console.log('- FRONTEND_URL:', process.env.FRONTEND_URL);
 
 import express from 'express';
 import mongoose from 'mongoose';
@@ -48,7 +58,9 @@ app.use('/api/', limiter);
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
-  process.env.FRONTEND_URL
+  process.env.FRONTEND_URL,
+  // Add your production frontend URL here
+  'https://your-frontend-app.onrender.com'
 ].filter(Boolean);
 
 console.log('🌐 Allowed CORS origins:', allowedOrigins);
@@ -162,12 +174,26 @@ const connectDB = async () => {
   try {
     const mongoURI = process.env.MONGODB_URI;
     if (!mongoURI) {
-      console.warn('⚠️  MONGODB_URI not set in environment variables.');
+      console.error('❌ MONGODB_URI not set in environment variables.');
+      console.error('🔧 Please set MONGODB_URI in your Render environment variables.');
       throw new Error('MongoDB URI is required');
     }
     
     console.log('🌐 Attempting to connect to MongoDB...');
-    console.log('🔗 MongoDB URI:', mongoURI.substring(0, 20) + '...');
+    console.log('🔗 MongoDB URI prefix:', mongoURI.substring(0, 30) + '...');
+    
+    // Add connection event listeners
+    mongoose.connection.on('connected', () => {
+      console.log('✅ Mongoose connected to MongoDB');
+    });
+    
+    mongoose.connection.on('error', (err) => {
+      console.error('❌ Mongoose connection error:', err);
+    });
+    
+    mongoose.connection.on('disconnected', () => {
+      console.log('📡 Mongoose disconnected');
+    });
     
     await mongoose.connect(mongoURI, {
       maxPoolSize: 10,
@@ -185,7 +211,12 @@ const connectDB = async () => {
   } catch (error) {
     console.error('❌ MongoDB connection error:', error.message);
     console.error('🔍 Error details:', error);
-    throw error; // Re-throw to prevent silent failures
+    // Don't throw in production, let the app start without DB
+    if (process.env.NODE_ENV === 'production') {
+      console.error('🔄 Starting server without MongoDB connection...');
+      return;
+    }
+    throw error;
   }
 };
 
