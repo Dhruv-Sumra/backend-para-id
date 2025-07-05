@@ -1,4 +1,13 @@
 // Simple health check script for debugging
+// Load environment variables
+try {
+  const { config } = await import('dotenv');
+  config();
+  console.log('✅ Environment variables loaded from .env');
+} catch (error) {
+  console.log('📝 dotenv not available, using system environment variables');
+}
+
 import mongoose from 'mongoose';
 
 console.log('🔍 Health Check Script Starting...');
