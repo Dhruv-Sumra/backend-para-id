@@ -1,0 +1,16 @@
+node_modules
+.env
+.env.local
+.env.production
+.env.staging
+.git
+.gitignore
+README.md
+render.yaml
+debug-env.js
+health-check.js
+*.log
+uploads/*
+idcards/*
+!uploads/.gitkeep
+!idcards/.gitkeep

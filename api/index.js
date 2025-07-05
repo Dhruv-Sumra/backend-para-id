@@ -1,4 +1,4 @@
-const serverlessExpress = require('@vendia/serverless-express');
-const app = require('../server');
+import app from '../server.js';
 
-module.exports = serverlessExpress({ app }); 
+// Export the app for Vercel serverless functions
+export default app;
