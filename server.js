@@ -84,6 +84,57 @@ app.use('/idcards', express.static(path.join(__dirname, 'idcards'), {
   lastModified: true
 }));
 
+// Database connection for serverless and regular environments
+let isConnected = false;
+
+const connectDB = async () => {
+  if (isConnected) return;
+  try {
+    const mongoURI = process.env.MONGODB_URI;
+    if (!process.env.MONGODB_URI) {
+      console.warn('⚠️  MONGODB_URI not set in .env, using local MongoDB.');
+    } else {
+      console.log('🌐 Using MongoDB URI from .env:', process.env.MONGODB_URI);
+    }
+    
+    // Different connection options for serverless vs regular deployment
+    const connectionOptions = {
+      maxPoolSize: process.env.VERCEL === '1' ? 10 : 50,
+      minPoolSize: process.env.VERCEL === '1' ? 1 : 10,
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 60000,
+      bufferCommands: process.env.VERCEL === '1' ? true : false, // Enable buffering for serverless
+      maxIdleTimeMS: 30000,
+      retryWrites: true,
+      w: 'majority',
+      readPreference: 'secondaryPreferred',
+    };
+    
+    await mongoose.connect(mongoURI, connectionOptions);
+    isConnected = true;
+    console.log('✅ Connected to MongoDB successfully!');
+  } catch (error) {
+    console.error('❌ MongoDB connection error:', error.message);
+    throw error;
+  }
+};
+
+// Middleware to ensure database connection before handling requests
+app.use(async (req, res, next) => {
+  if (!isConnected) {
+    try {
+      await connectDB();
+    } catch (error) {
+      return res.status(503).json({ 
+        success: false, 
+        error: 'Database connection failed',
+        message: 'Please try again later'
+      });
+    }
+  }
+  next();
+});
+
 // Routes
 app.use('/api/players', playerRoutes);
 app.use('/api/idcards', idcardRoutes);
@@ -136,35 +187,7 @@ app.use((req, res) => {
   res.status(404).json({ success: false, error: 'Not found' });
 });
 
-// Remove or conditionally disable app.listen and server tuning for serverless
-let isConnected = false;
-
-const connectDB = async () => {
-  if (isConnected) return;
-  try {
-    const mongoURI = process.env.MONGODB_URI;
-    if (!process.env.MONGODB_URI) {
-      console.warn('⚠️  MONGODB_URI not set in .env, using local MongoDB.');
-    } else {
-      console.log('🌐 Using MongoDB URI from .env:', process.env.MONGODB_URI);
-    }
-    await mongoose.connect(mongoURI, {
-      maxPoolSize: 50,
-      minPoolSize: 10,
-      serverSelectionTimeoutMS: 10000,
-      socketTimeoutMS: 60000,
-      bufferCommands: false,
-      maxIdleTimeMS: 30000,
-      retryWrites: true,
-      w: 'majority',
-      readPreference: 'secondaryPreferred',
-    });
-    isConnected = true;
-    console.log('✅ Connected to MongoDB successfully!');
-  } catch (error) {
-    console.error('❌ MongoDB connection error:', error.message);
-  }
-};
+// Server startup logic for different environments
 
 // Only start the server if not in a serverless environment
 if (process.env.VERCEL !== '1') {
@@ -176,9 +199,13 @@ if (process.env.VERCEL !== '1') {
     server.maxConnections = 1000;
     server.keepAliveTimeout = 65000;
     server.headersTimeout = 66000;
+  }).catch(error => {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
   });
 } else {
-  connectDB();
+  // For serverless, don't connect immediately, let the middleware handle it
+  console.log('🔄 Serverless mode: Database connection will be established on first request');
 }
 
 export default app;
